@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HSE 조선소 Gemini-AI 결재 시스템</title>
+    <title>HSE 조선소 Gemini-AI 결재 시스템 (진단 기능 포함)</title>
     <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 font-sans">
@@ -11,7 +11,7 @@
     <div class="max-w-6xl mx-auto">
         <header class="border-b border-slate-800 pb-4 mb-6 text-center">
             <h1 class="text-2xl font-bold text-cyan-400 tracking-wider">🚢 조선소 최고안전책임자(CSO) 무상 결재 시스템</h1>
-            <p class="text-xs text-slate-400 mt-1">iPad Chrome 최적화 · 100% 무료 프리 티어 버전</p>
+            <p class="text-xs text-rose-400 mt-1">⚠️ 문제 해결 및 진단 기능이 탑재된 버전입니다.</p>
         </header>
 
         <section class="bg-slate-800 p-4 rounded-xl mb-6">
@@ -38,7 +38,7 @@
                     <h2 class="text-md font-bold text-blue-400">⚖️ 1차 Gemini 법리 검토</h2>
                     <span id="step1Status" class="text-xs bg-slate-700 px-2 py-1 rounded text-slate-400">대기 중</span>
                 </div>
-                <div id="step1Output" class="bg-slate-900 p-4 rounded-lg text-sm min-h-[300px] whitespace-pre-wrap overflow-y-auto border border-slate-700">작업 계획을 입력하고 심사를 시작해 주세요.</div>
+                <div id="step1Output" class="bg-slate-900 p-4 rounded-lg text-sm min-h-[300px] whitespace-pre-wrap overflow-y-auto border border-slate-700 text-slate-300">작업 계획을 입력하고 심사를 시작해 주세요.</div>
             </div>
 
             <div class="bg-slate-800 p-5 rounded-xl border border-cyan-900">
@@ -46,4 +46,90 @@
                     <h2 class="text-md font-bold text-cyan-400">🛡️ 최종 Gemini CSO 결재</h2>
                     <span id="step2Status" class="text-xs bg-slate-700 px-2 py-1 rounded text-slate-400">대기 중</span>
                 </div>
-                <div id="step2Output" class="bg-
+                <div id="step2Output" class="bg-slate-900 p-4 rounded-lg text-sm min-h-[300px] whitespace-pre-wrap overflow-y-auto border border-slate-700 text-slate-300">최고안전책임자(CSO) 최종 결재 대기 중...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const step1SystemPrompt = `당신은 산업안전보건(HSE) 전문 어시스턴트입니다. 한국 산업안전보건법 체계에 정통합니다. 입력된 작업 위험성을 분석하여 [1.법적근거, 2.핵심위험 3가지] 형태로 깔끔하게 한국어로 출력하세요.`;
+        const step2SystemPrompt = `당신은 대형 조선소의 최고안전책임자(CSO)이자 최종 작업 승인권자입니다. APPROVED 또는 REJECTED를 단호하게 결정하고 최고안전책임자의 시각에서 이유를 요약하십시오.`;
+
+        window.onload = function() {
+            const savedGemini = localStorage.getItem('free_g_key');
+            if (savedGemini) document.getElementById('geminiKey').value = savedGemini;
+        }
+
+        function saveKeysToBrowser() {
+            const gKey = document.getElementById('geminiKey').value.trim();
+            localStorage.setItem('free_g_key', gKey);
+            alert("🔒 구글 제미나이 출입증이 크롬에 저장되었습니다!");
+        }
+
+        async function startGeminiAudit() {
+            const gKey = document.getElementById('geminiKey').value.trim();
+            const plan = document.getElementById('workPlan').value;
+
+            if(!gKey || !plan) {
+                alert("Gemini API 키와 작업 계획을 모두 입력해주세요!");
+                return;
+            }
+
+            document.getElementById('runBtn').innerText = "⏳ 1단계 분석 중...";
+            document.getElementById('step1Status').innerText = "분석 중";
+            document.getElementById('step1Output').classList.remove('text-rose-400');
+
+            try {
+                // 1단계 호출
+                const response1 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `${step1SystemPrompt}\n\n[작업 계획]\n${plan}` }] }]
+                    })
+                });
+
+                if(!response1.ok) {
+                    const errData = await response1.json();
+                    throw new Error(`[구글 서버 에러] ${errData.error.message || 'API 키가 올바르지 않거나 권한이 없습니다.'}`);
+                }
+
+                const data1 = await response1.json();
+                const step1Text = data1.candidates[0].content.parts[0].text;
+                document.getElementById('step1Output').innerText = step1Text;
+                document.getElementById('step1Status').innerText = "완료";
+                
+                // 2단계 호출
+                document.getElementById('runBtn').innerText = "⏳ 2단계 최종 심사 중...";
+                document.getElementById('step2Status').innerText = "심사 중";
+
+                const response2 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `${step2SystemPrompt}\n\n[1차 리포트]\n${step1Text}\n\n최종 결재 문서를 출력하라.` }] }]
+                    })
+                });
+
+                if(!response2.ok) {
+                    const errData = await response2.json();
+                    throw new Error(`[2단계 에러] ${errData.error.message}`);
+                }
+
+                const data2 = await response2.json();
+                const step2Text = data2.candidates[0].content.parts[0].text;
+                document.getElementById('step2Output').innerText = step2Text;
+                document.getElementById('step2Status').innerText = "결재 완료";
+                document.getElementById('runBtn').innerText = "⚡ 심사 완료";
+
+            } catch (error) {
+                console.error(error);
+                document.getElementById('step1Output').classList.add('text-rose-400');
+                document.getElementById('step1Output').innerText = `❌ 에러가 발생했습니다!\n\n${error.message}\n\n법리 검토창 상단 타이틀이 빨간색 경고 버전인지 확인하시고, 구글 API 키가 맞는지 다시 검토해 주세요.`;
+                document.getElementById('runBtn').innerText = "⚡ 재시도하기";
+                document.getElementById('step1Status').innerText = "에러 발생";
+            }
+        }
+    </script>
+</body>
+</html>
