@@ -3,17 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HSE 조선소 Gemini-AI 결재 시스템 (진단 기능 포함)</title>
+    <title>HSE 조선소 Gemini-AI 결재 시스템</title>
     <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 font-sans">
 
     <div class="max-w-6xl mx-auto">
+        <!-- 헤더 -->
         <header class="border-b border-slate-800 pb-4 mb-6 text-center">
             <h1 class="text-2xl font-bold text-cyan-400 tracking-wider">🚢 조선소 최고안전책임자(CSO) 무상 결재 시스템</h1>
-            <p class="text-xs text-rose-400 mt-1">⚠️ 문제 해결 및 진단 기능이 탑재된 버전입니다.</p>
+            <p class="text-xs text-emerald-400 mt-1">✅ 최신 최적화 모델 탑재 완료 · 100% 무료 버전</p>
         </header>
 
+        <!-- API 키 설정 공간 -->
         <section class="bg-slate-800 p-4 rounded-xl mb-6">
             <div class="text-sm mb-3">
                 <label class="block text-slate-400 mb-1">Gemini API Key</label>
@@ -24,6 +26,7 @@
             </button>
         </section>
 
+        <!-- 작업 계획 입력 공간 -->
         <section class="bg-slate-800 p-5 rounded-xl mb-6">
             <label class="block text-lg font-medium text-slate-200 mb-2">🚧 현장 작업 내용 및 계획서 입력</label>
             <textarea id="workPlan" rows="4" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500" placeholder="예시: 안벽 2번 마르스 크레인 구역 하부 고소 용접 작업 진행 및 양중 작업 간섭 우려 존재."></textarea>
@@ -32,7 +35,9 @@
             </button>
         </section>
 
+        <!-- AI 결과 출력 레이아웃 (반반 분할) -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- 왼쪽: Gemini 1차 법리 분석 -->
             <div class="bg-slate-800 p-5 rounded-xl border border-blue-900">
                 <div class="flex justify-between items-center mb-3">
                     <h2 class="text-md font-bold text-blue-400">⚖️ 1차 Gemini 법리 검토</h2>
@@ -41,6 +46,7 @@
                 <div id="step1Output" class="bg-slate-900 p-4 rounded-lg text-sm min-h-[300px] whitespace-pre-wrap overflow-y-auto border border-slate-700 text-slate-300">작업 계획을 입력하고 심사를 시작해 주세요.</div>
             </div>
 
+            <!-- 오른쪽: Gemini 2차 CSO 최종 승인 -->
             <div class="bg-slate-800 p-5 rounded-xl border border-cyan-900">
                 <div class="flex justify-between items-center mb-3">
                     <h2 class="text-md font-bold text-cyan-400">🛡️ 최종 Gemini CSO 결재</h2>
@@ -60,6 +66,8 @@
             if (savedGemini) document.getElementById('geminiKey').value = savedGemini;
         }
 
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
         function saveKeysToBrowser() {
             const gKey = document.getElementById('geminiKey').value.trim();
             localStorage.setItem('free_g_key', gKey);
@@ -77,11 +85,10 @@
 
             document.getElementById('runBtn').innerText = "⏳ 1단계 분석 중...";
             document.getElementById('step1Status').innerText = "분석 중";
-            document.getElementById('step1Output').classList.remove('text-rose-400');
 
             try {
-                // 1단계 호출
-                const response1 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gKey}`, {
+                // [수정 포인트] 최신 모델인 gemini-2.5-flash로 주소 변경
+                const response1 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -91,7 +98,7 @@
 
                 if(!response1.ok) {
                     const errData = await response1.json();
-                    throw new Error(`[구글 서버 에러] ${errData.error.message || 'API 키가 올바르지 않거나 권한이 없습니다.'}`);
+                    throw new Error(`[1단계 에러] ${errData.error.message}`);
                 }
 
                 const data1 = await response1.json();
@@ -99,11 +106,11 @@
                 document.getElementById('step1Output').innerText = step1Text;
                 document.getElementById('step1Status').innerText = "완료";
                 
-                // 2단계 호출
                 document.getElementById('runBtn').innerText = "⏳ 2단계 최종 심사 중...";
                 document.getElementById('step2Status').innerText = "심사 중";
 
-                const response2 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gKey}`, {
+                // [수정 포인트] 최신 모델인 gemini-2.5-flash로 주소 변경
+                const response2 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -124,10 +131,9 @@
 
             } catch (error) {
                 console.error(error);
-                document.getElementById('step1Output').classList.add('text-rose-400');
-                document.getElementById('step1Output').innerText = `❌ 에러가 발생했습니다!\n\n${error.message}\n\n법리 검토창 상단 타이틀이 빨간색 경고 버전인지 확인하시고, 구글 API 키가 맞는지 다시 검토해 주세요.`;
+                document.getElementById('step1Output').innerText = `❌ 에러 발생:\n${error.message}`;
                 document.getElementById('runBtn').innerText = "⚡ 재시도하기";
-                document.getElementById('step1Status').innerText = "에러 발생";
+                document.getElementById('step1Status').innerText = "에러";
             }
         }
     </script>
