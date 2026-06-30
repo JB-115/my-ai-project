@@ -1,141 +1,415 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HSE 조선소 Gemini-AI 결재 시스템</title>
-    <script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>조선소 CSO 결재 시스템 v2.0</title>
+
+<!-- Tailwind (공식 Play CDN) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Markdown 렌더링 + XSS 방어 -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['-apple-system','BlinkMacSystemFont','"Apple SD Gothic Neo"','"Pretendard"','"Noto Sans KR"','sans-serif']
+        }
+      }
+    }
+  }
+</script>
+
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body { -webkit-tap-highlight-color: transparent; }
+
+  /* 출력창 안 마크다운 가독성 (다크 모드 전용) */
+  .md-body { line-height: 1.75; font-size: 1rem; color: #e2e8f0; word-break: keep-all; }
+  .md-body > *:first-child { margin-top: 0; }
+  .md-body h1,.md-body h2,.md-body h3 { color:#67e8f9; font-weight:700; line-height:1.4; margin:1.1em 0 .5em; }
+  .md-body h1 { font-size:1.3rem; } .md-body h2 { font-size:1.15rem; } .md-body h3 { font-size:1.05rem; }
+  .md-body p { margin:.6em 0; }
+  .md-body ul,.md-body ol { margin:.6em 0; padding-left:1.4em; }
+  .md-body li { margin:.35em 0; }
+  .md-body strong { color:#fde68a; font-weight:700; }
+  .md-body code { background:#0f172a; color:#7dd3fc; padding:.1em .4em; border-radius:.3em; font-size:.9em; }
+  .md-body pre { background:#0f172a; padding:.9em; border-radius:.6em; overflow-x:auto; margin:.7em 0; }
+  .md-body pre code { background:none; padding:0; }
+  .md-body blockquote { border-left:3px solid #334155; padding-left:.9em; color:#94a3b8; margin:.7em 0; }
+  .md-body table { width:100%; border-collapse:collapse; margin:.8em 0; font-size:.92rem; }
+  .md-body th,.md-body td { border:1px solid #334155; padding:.5em .7em; text-align:left; }
+  .md-body th { background:#1e293b; color:#cbd5e1; }
+  .md-body hr { border:0; border-top:1px solid #334155; margin:1em 0; }
+
+  /* 안전 경고 줄무늬 (시그니처) */
+  .hazard-stripe {
+    height:6px;
+    background:repeating-linear-gradient(45deg,#facc15 0 14px,#0f172a 14px 28px);
+    opacity:.85;
+  }
+
+  /* 처리 중 점멸 */
+  @keyframes pulseDot { 0%,100%{opacity:.35} 50%{opacity:1} }
+  .processing .dot { animation:pulseDot 1s infinite; }
+
+  /* 인쇄 시 결재서만 출력 */
+  @media print {
+    body * { visibility:hidden !important; }
+    #printArea, #printArea * { visibility:visible !important; }
+    #printArea { position:absolute; left:0; top:0; width:100%; padding:24px; color:#000; background:#fff; }
+  }
+</style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-4 font-sans">
 
-    <div class="max-w-6xl mx-auto">
-        <!-- 헤더 -->
-        <header class="border-b border-slate-800 pb-4 mb-6 text-center">
-            <h1 class="text-2xl font-bold text-cyan-400 tracking-wider">🚢 조선소 최고안전책임자(CSO) 무상 결재 시스템</h1>
-            <p class="text-xs text-emerald-400 mt-1">✅ 최신 최적화 모델 탑재 완료 · 100% 무료 버전</p>
-        </header>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
 
-        <!-- API 키 설정 공간 -->
-        <section class="bg-slate-800 p-4 rounded-xl mb-6">
-            <div class="text-sm mb-3">
-                <label class="block text-slate-400 mb-1">Gemini API Key</label>
-                <input type="password" id="geminiKey" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white" placeholder="AIzaSy...">
-            </div>
-            <button onclick="saveKeysToBrowser()" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs py-2 px-4 rounded transition">
-                🔑 구글 출입증(Gemini API 키) 크롬에 안전하게 기억하기
-            </button>
-        </section>
+<div class="max-w-6xl mx-auto px-4 pb-16 pt-[max(env(safe-area-inset-top),0.5rem)]">
 
-        <!-- 작업 계획 입력 공간 -->
-        <section class="bg-slate-800 p-5 rounded-xl mb-6">
-            <label class="block text-lg font-medium text-slate-200 mb-2">🚧 현장 작업 내용 및 계획서 입력</label>
-            <textarea id="workPlan" rows="4" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500" placeholder="예시: 안벽 2번 마르스 크레인 구역 하부 고소 용접 작업 진행 및 양중 작업 간섭 우려 존재."></textarea>
-            <button onclick="startGeminiAudit()" id="runBtn" class="w-full mt-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-4 rounded-lg transition tracking-wide">
-                ⚡ Gemini-AI 2단계 교차 심사 시작
-            </button>
-        </section>
-
-        <!-- AI 결과 출력 레이아웃 (반반 분할) -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- 왼쪽: Gemini 1차 법리 분석 -->
-            <div class="bg-slate-800 p-5 rounded-xl border border-blue-900">
-                <div class="flex justify-between items-center mb-3">
-                    <h2 class="text-md font-bold text-blue-400">⚖️ 1차 Gemini 법리 검토</h2>
-                    <span id="step1Status" class="text-xs bg-slate-700 px-2 py-1 rounded text-slate-400">대기 중</span>
-                </div>
-                <div id="step1Output" class="bg-slate-900 p-4 rounded-lg text-sm min-h-[300px] whitespace-pre-wrap overflow-y-auto border border-slate-700 text-slate-300">작업 계획을 입력하고 심사를 시작해 주세요.</div>
-            </div>
-
-            <!-- 오른쪽: Gemini 2차 CSO 최종 승인 -->
-            <div class="bg-slate-800 p-5 rounded-xl border border-cyan-900">
-                <div class="flex justify-between items-center mb-3">
-                    <h2 class="text-md font-bold text-cyan-400">🛡️ 최종 Gemini CSO 결재</h2>
-                    <span id="step2Status" class="text-xs bg-slate-700 px-2 py-1 rounded text-slate-400">대기 중</span>
-                </div>
-                <div id="step2Output" class="bg-slate-900 p-4 rounded-lg text-sm min-h-[300px] whitespace-pre-wrap overflow-y-auto border border-slate-700 text-slate-300">최고안전책임자(CSO) 최종 결재 대기 중...</div>
-            </div>
-        </div>
+  <!-- ===== 헤더 ===== -->
+  <header class="mb-6">
+    <div class="rounded-2xl overflow-hidden border border-slate-800 bg-slate-900">
+      <div class="hazard-stripe"></div>
+      <div class="px-6 py-5 text-center">
+        <h1 class="text-2xl sm:text-3xl font-bold text-cyan-400 tracking-wide">🚢 조선소 최고안전책임자(CSO) 결재 시스템</h1>
+        <p class="text-sm text-emerald-400 mt-2">2단계 AI 교차 심사 · 100% 무료 · 서버리스 단일 파일 <span class="text-slate-500">v2.0</span></p>
+      </div>
     </div>
+  </header>
 
-    <script>
-        const step1SystemPrompt = `당신은 산업안전보건(HSE) 전문 어시스턴트입니다. 한국 산업안전보건법 체계에 정통합니다. 입력된 작업 위험성을 분석하여 [1.법적근거, 2.핵심위험 3가지] 형태로 깔끔하게 한국어로 출력하세요.`;
-        const step2SystemPrompt = `당신은 대형 조선소의 최고안전책임자(CSO)이자 최종 작업 승인권자입니다. APPROVED 또는 REJECTED를 단호하게 결정하고 최고안전책임자의 시각에서 이유를 요약하십시오.`;
+  <!-- ===== API 키 ===== -->
+  <section class="bg-slate-900 border border-slate-800 p-5 rounded-2xl mb-5">
+    <label class="block text-sm font-medium text-slate-400 mb-2">Gemini API Key</label>
+    <div class="flex gap-2">
+      <input type="password" id="geminiKey" autocomplete="off"
+        class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-base text-white focus:outline-none focus:border-cyan-500"
+        placeholder="AIzaSy...">
+      <button onclick="toggleKey()" id="keyToggle" aria-label="키 보기 전환"
+        class="shrink-0 w-14 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xl active:scale-95 transition">👁️</button>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-2 mt-3">
+      <button onclick="saveKey()"
+        class="flex-1 min-h-[48px] bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl active:scale-[.99] transition">
+        🔑 이 브라우저에 키 저장
+      </button>
+      <button onclick="clearKey()"
+        class="sm:w-40 min-h-[48px] bg-slate-800 hover:bg-slate-700 text-slate-400 text-sm rounded-xl active:scale-[.99] transition">
+        저장된 키 삭제
+      </button>
+    </div>
+    <p class="text-xs text-slate-500 mt-2 leading-relaxed">키는 이 기기 브라우저(localStorage)에만 저장됩니다. 공용 기기에서는 사용 후 ‘저장된 키 삭제’를 눌러 주세요.</p>
+  </section>
 
-        window.onload = function() {
-            const savedGemini = localStorage.getItem('free_g_key');
-            if (savedGemini) document.getElementById('geminiKey').value = savedGemini;
-        }
+  <!-- ===== 작업 계획 입력 ===== -->
+  <section class="bg-slate-900 border border-slate-800 p-5 rounded-2xl mb-5">
+    <label class="block text-lg font-semibold text-slate-100 mb-3">🚧 현장 작업 내용 및 계획서</label>
+    <textarea id="workPlan" rows="5"
+      class="w-full bg-slate-800 border border-slate-700 rounded-xl p-4 text-base leading-relaxed text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+      placeholder="예시: 안벽 2번 마르스 크레인 구역 하부에서 고소 용접 작업을 진행하며, 동시간대 양중 작업과의 간섭이 우려됨."></textarea>
 
-        document.addEventListener('contextmenu', event => event.preventDefault());
+    <div class="flex flex-col sm:flex-row gap-3 mt-4">
+      <button onclick="startAudit()" id="runBtn"
+        class="flex-1 min-h-[56px] bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-base font-bold rounded-xl active:scale-[.99] transition tracking-wide">
+        ⚡ AI 2단계 교차 심사 시작
+      </button>
+      <button onclick="resetAll()" id="resetBtn"
+        class="sm:w-36 min-h-[56px] bg-slate-800 hover:bg-slate-700 text-slate-300 text-base rounded-xl active:scale-[.99] transition">
+        초기화
+      </button>
+    </div>
+  </section>
 
-        function saveKeysToBrowser() {
-            const gKey = document.getElementById('geminiKey').value.trim();
-            localStorage.setItem('free_g_key', gKey);
-            alert("🔒 구글 제미나이 출입증이 크롬에 저장되었습니다!");
-        }
+  <!-- ===== 오류 배너 ===== -->
+  <div id="errorBox" class="hidden bg-red-950 border border-red-800 text-red-200 rounded-xl px-4 py-3 mb-5 text-sm leading-relaxed"></div>
 
-        async function startGeminiAudit() {
-            const gKey = document.getElementById('geminiKey').value.trim();
-            const plan = document.getElementById('workPlan').value;
+  <!-- ===== 결과 패널 ===== -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
-            if(!gKey || !plan) {
-                alert("Gemini API 키와 작업 계획을 모두 입력해주세요!");
-                return;
-            }
+    <!-- 1단계 -->
+    <section class="bg-slate-900 p-5 rounded-2xl border border-blue-900/60">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-base font-bold text-blue-300">⚖️ 1차 법리 검토</h2>
+        <span id="step1Status" class="text-xs bg-slate-800 px-3 py-1.5 rounded-full text-slate-400">대기 중</span>
+      </div>
+      <div id="step1Output" class="md-body bg-slate-950 p-5 rounded-xl min-h-[280px] max-h-[60vh] overflow-y-auto border border-slate-800 text-slate-400">
+        작업 계획을 입력하고 심사를 시작해 주세요.
+      </div>
+      <button onclick="copyOutput('step1Output', this)"
+        class="w-full mt-3 min-h-[48px] bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl active:scale-[.99] transition">
+        📋 1차 결과 복사
+      </button>
+    </section>
 
-            document.getElementById('runBtn').innerText = "⏳ 1단계 분석 중...";
-            document.getElementById('step1Status').innerText = "분석 중";
+    <!-- 2단계 -->
+    <section class="bg-slate-900 p-5 rounded-2xl border border-cyan-900/60">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-base font-bold text-cyan-300">🛡️ 최종 CSO 결재</h2>
+        <span id="step2Status" class="text-xs bg-slate-800 px-3 py-1.5 rounded-full text-slate-400">대기 중</span>
+      </div>
 
-            try {
-                // [수정 포인트] 최신 모델인 gemini-2.5-flash로 주소 변경
-                const response1 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: `${step1SystemPrompt}\n\n[작업 계획]\n${plan}` }] }]
-                    })
-                });
+      <!-- 결재 판정 배지 -->
+      <div id="decisionBadge" class="hidden mb-4 rounded-xl px-4 py-3 text-center font-bold text-lg border"></div>
 
-                if(!response1.ok) {
-                    const errData = await response1.json();
-                    throw new Error(`[1단계 에러] ${errData.error.message}`);
-                }
+      <div id="step2Output" class="md-body bg-slate-950 p-5 rounded-xl min-h-[280px] max-h-[60vh] overflow-y-auto border border-slate-800 text-slate-400">
+        최고안전책임자(CSO) 최종 결재 대기 중...
+      </div>
+      <div class="flex flex-col sm:flex-row gap-2 mt-3">
+        <button onclick="copyOutput('step2Output', this)"
+          class="flex-1 min-h-[48px] bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl active:scale-[.99] transition">
+          📋 결재 결과 복사
+        </button>
+        <button onclick="printDecision()" id="printBtn" disabled
+          class="sm:w-40 min-h-[48px] bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 text-sm rounded-xl active:scale-[.99] transition">
+          🖨️ 결재서 출력
+        </button>
+      </div>
+    </section>
+  </div>
 
-                const data1 = await response1.json();
-                const step1Text = data1.candidates[0].content.parts[0].text;
-                document.getElementById('step1Output').innerText = step1Text;
-                document.getElementById('step1Status').innerText = "완료";
-                
-                document.getElementById('runBtn').innerText = "⏳ 2단계 최종 심사 중...";
-                document.getElementById('step2Status').innerText = "심사 중";
+  <footer class="text-center text-xs text-slate-600 mt-8 leading-relaxed">
+    본 도구의 AI 분석 결과는 실무 검토를 돕기 위한 참고 자료이며, 법적 효력을 갖는 최종 결재를 대체하지 않습니다.
+  </footer>
+</div>
 
-                // [수정 포인트] 최신 모델인 gemini-2.5-flash로 주소 변경
-                const response2 = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: `${step2SystemPrompt}\n\n[1차 리포트]\n${step1Text}\n\n최종 결재 문서를 출력하라.` }] }]
-                    })
-                });
+<!-- 인쇄용 영역 (화면에는 숨김) -->
+<div id="printArea" class="hidden"></div>
 
-                if(!response2.ok) {
-                    const errData = await response2.json();
-                    throw new Error(`[2단계 에러] ${errData.error.message}`);
-                }
+<script>
+/* ===== 시스템 프롬프트 (구조 유지) ===== */
+const STEP1_PROMPT = `당신은 산업안전보건(HSE) 전문 어시스턴트입니다. 한국 산업안전보건법 체계에 정통합니다. 입력된 작업의 위험성을 분석하여 마크다운 형식으로 다음 항목을 한국어로 명확히 작성하세요.\n\n## 1. 법적 근거\n관련 산업안전보건법령·기준(가능한 경우 조항)을 제시\n\n## 2. 핵심 위험요인 3가지\n각 위험요인과 발생 시나리오를 간단히 서술\n\n## 3. 권고 안전조치\n각 위험에 대응하는 통제 대책`;
 
-                const data2 = await response2.json();
-                const step2Text = data2.candidates[0].content.parts[0].text;
-                document.getElementById('step2Output').innerText = step2Text;
-                document.getElementById('step2Status').innerText = "결재 완료";
-                document.getElementById('runBtn').innerText = "⚡ 심사 완료";
+const STEP2_PROMPT = `당신은 대형 조선소의 최고안전책임자(CSO)이자 최종 작업 승인권자입니다. 1차 법리 리포트를 검토하여 결재합니다.\n\n반드시 첫 줄에 판정을 다음 형식으로 단독 출력하세요: "판정: APPROVED" 또는 "판정: REJECTED"\n그 다음 줄부터 마크다운으로 결재 사유, 필수 선행조건(있다면), 모니터링 지침을 CSO의 단호한 시각에서 요약하세요.`;
 
-            } catch (error) {
-                console.error(error);
-                document.getElementById('step1Output').innerText = `❌ 에러 발생:\n${error.message}`;
-                document.getElementById('runBtn').innerText = "⚡ 재시도하기";
-                document.getElementById('step1Status').innerText = "에러";
-            }
-        }
-    </script>
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const KEY_STORE = 'cso_gemini_key';
+const PLAN_STORE = 'cso_last_plan';
+
+let lastDecisionText = '';
+
+/* ===== 초기 로드 ===== */
+window.addEventListener('load', () => {
+  const savedKey = localStorage.getItem(KEY_STORE);
+  if (savedKey) document.getElementById('geminiKey').value = savedKey;
+  const savedPlan = localStorage.getItem(PLAN_STORE);
+  if (savedPlan) document.getElementById('workPlan').value = savedPlan;
+});
+// 작업 계획 자동 저장 (새로고침해도 유지)
+document.getElementById('workPlan').addEventListener('input', e => {
+  localStorage.setItem(PLAN_STORE, e.target.value);
+});
+
+/* ===== 키 관리 ===== */
+function toggleKey() {
+  const el = document.getElementById('geminiKey');
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+function saveKey() {
+  const k = document.getElementById('geminiKey').value.trim();
+  if (!k) { alert('먼저 API 키를 입력해 주세요.'); return; }
+  localStorage.setItem(KEY_STORE, k);
+  alert('🔒 이 브라우저에 키가 저장되었습니다.');
+}
+function clearKey() {
+  localStorage.removeItem(KEY_STORE);
+  document.getElementById('geminiKey').value = '';
+  alert('저장된 키를 삭제했습니다.');
+}
+
+/* ===== 마크다운 렌더링 (CDN 실패 시 원문 표시로 폴백) ===== */
+function render(elId, text) {
+  const el = document.getElementById(elId);
+  el.dataset.raw = text;
+  el.classList.remove('text-slate-400');
+  if (window.marked && window.DOMPurify) {
+    el.innerHTML = DOMPurify.sanitize(marked.parse(text));
+  } else {
+    el.textContent = text;
+  }
+}
+
+/* ===== 상태 칩 ===== */
+function setStatus(id, label, mode) {
+  const el = document.getElementById(id);
+  el.textContent = label;
+  el.className = 'text-xs px-3 py-1.5 rounded-full ' + ({
+    wait:  'bg-slate-800 text-slate-400',
+    run:   'bg-amber-900/60 text-amber-300 processing',
+    done:  'bg-emerald-900/60 text-emerald-300',
+    error: 'bg-red-900/60 text-red-300'
+  }[mode] || 'bg-slate-800 text-slate-400');
+  if (mode === 'run') el.innerHTML = '<span class="dot">●</span> ' + label;
+}
+
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  box.textContent = '❌ ' + msg;
+  box.classList.remove('hidden');
+}
+function hideError() { document.getElementById('errorBox').classList.add('hidden'); }
+
+/* ===== Gemini 호출 (견고한 응답 파싱) ===== */
+async function callGemini(key, prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.3 }
+    })
+  });
+
+  let data;
+  try { data = await res.json(); }
+  catch { throw new Error(`서버 응답을 해석하지 못했습니다 (HTTP ${res.status}).`); }
+
+  if (!res.ok) {
+    const m = data?.error?.message || `요청 실패 (HTTP ${res.status})`;
+    throw new Error(m);
+  }
+  const cand = data?.candidates?.[0];
+  const text = cand?.content?.parts?.map(p => p.text || '').join('').trim();
+  if (!text) {
+    const reason = cand?.finishReason || data?.promptFeedback?.blockReason || '내용 없음';
+    throw new Error(`AI가 응답을 생성하지 못했습니다 (사유: ${reason}). 작업 계획을 더 구체적으로 입력해 보세요.`);
+  }
+  return text;
+}
+
+/* ===== 판정 배지 ===== */
+function updateDecisionBadge(text) {
+  const badge = document.getElementById('decisionBadge');
+  const upper = text.toUpperCase();
+  const approved = /\bAPPROVED\b|승인/.test(upper) && !/REJECTED|반려|불허/.test(upper);
+  const rejected = /\bREJECTED\b|반려|불허/.test(upper);
+
+  if (approved) {
+    badge.textContent = '✅ 결재 판정: 승인 (APPROVED)';
+    badge.className = 'mb-4 rounded-xl px-4 py-3 text-center font-bold text-lg border bg-emerald-950 border-emerald-700 text-emerald-300';
+    badge.classList.remove('hidden');
+  } else if (rejected) {
+    badge.textContent = '⛔ 결재 판정: 반려 (REJECTED)';
+    badge.className = 'mb-4 rounded-xl px-4 py-3 text-center font-bold text-lg border bg-red-950 border-red-700 text-red-300';
+    badge.classList.remove('hidden');
+  } else {
+    badge.className = 'mb-4 rounded-xl px-4 py-3 text-center font-bold text-lg border bg-slate-800 border-slate-700 text-slate-300';
+    badge.textContent = '판정 결과를 확인하세요';
+    badge.classList.remove('hidden');
+  }
+}
+
+/* ===== 메인 심사 플로우 (2회 연속 호출 구조 유지) ===== */
+async function startAudit() {
+  const key = document.getElementById('geminiKey').value.trim();
+  const plan = document.getElementById('workPlan').value.trim();
+  hideError();
+
+  if (!key)  { showError('Gemini API 키를 입력해 주세요.'); return; }
+  if (!plan) { showError('현장 작업 계획을 입력해 주세요.'); return; }
+
+  const runBtn = document.getElementById('runBtn');
+  runBtn.disabled = true;
+  document.getElementById('resetBtn').disabled = true;
+  document.getElementById('printBtn').disabled = true;
+  document.getElementById('decisionBadge').classList.add('hidden');
+
+  try {
+    // --- 1단계: 법리 검토 ---
+    runBtn.textContent = '⏳ 1단계 법리 분석 중...';
+    setStatus('step1Status', '분석 중', 'run');
+    const step1 = await callGemini(key, `${STEP1_PROMPT}\n\n[작업 계획]\n${plan}`);
+    render('step1Output', step1);
+    setStatus('step1Status', '완료', 'done');
+
+    // --- 2단계: CSO 최종 결재 ---
+    runBtn.textContent = '⏳ 2단계 최종 결재 중...';
+    setStatus('step2Status', '심사 중', 'run');
+    const step2 = await callGemini(key, `${STEP2_PROMPT}\n\n[1차 법리 리포트]\n${step1}\n\n위 리포트를 근거로 최종 결재 문서를 출력하라.`);
+    lastDecisionText = step2;
+    updateDecisionBadge(step2);
+    render('step2Output', step2);
+    setStatus('step2Status', '결재 완료', 'done');
+
+    document.getElementById('printBtn').disabled = false;
+    runBtn.textContent = '⚡ 심사 완료 · 다시 실행';
+  } catch (err) {
+    showError(err.message);
+    setStatus(
+      document.getElementById('step1Status').textContent === '완료' ? 'step2Status' : 'step1Status',
+      '오류', 'error'
+    );
+    runBtn.textContent = '⚡ 재시도하기';
+  } finally {
+    runBtn.disabled = false;
+    document.getElementById('resetBtn').disabled = false;
+  }
+}
+
+/* ===== 복사 (clipboard API + 폴백) ===== */
+async function copyOutput(elId, btn) {
+  const el = document.getElementById(elId);
+  const text = el.dataset.raw || el.textContent;
+  if (!text || !el.dataset.raw) { return; }
+
+  const original = btn.textContent;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    btn.textContent = '✅ 복사됨!';
+  } catch {
+    btn.textContent = '복사 실패 — 길게 눌러 복사';
+  }
+  setTimeout(() => { btn.textContent = original; }, 1600);
+}
+
+/* ===== 결재서 인쇄 / PDF ===== */
+function printDecision() {
+  if (!lastDecisionText) return;
+  const plan = document.getElementById('workPlan').value.trim();
+  const now = new Date().toLocaleString('ko-KR');
+  const bodyHtml = (window.marked && window.DOMPurify)
+    ? DOMPurify.sanitize(marked.parse(lastDecisionText))
+    : `<pre>${lastDecisionText.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</pre>`;
+
+  document.getElementById('printArea').innerHTML = `
+    <h1 style="font-size:20px;margin:0 0 4px">조선소 CSO 결재서</h1>
+    <p style="font-size:12px;color:#555;margin:0 0 16px">출력 일시: ${now}</p>
+    <h2 style="font-size:14px;border-bottom:1px solid #000;padding-bottom:4px">대상 작업 계획</h2>
+    <p style="white-space:pre-wrap;font-size:13px;margin:8px 0 20px">${plan.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</p>
+    <h2 style="font-size:14px;border-bottom:1px solid #000;padding-bottom:4px">최종 결재 내용</h2>
+    <div style="font-size:13px;line-height:1.6">${bodyHtml}</div>`;
+  window.print();
+}
+
+/* ===== 초기화 ===== */
+function resetAll() {
+  document.getElementById('workPlan').value = '';
+  localStorage.removeItem(PLAN_STORE);
+  ['step1Output','step2Output'].forEach(id => {
+    const el = document.getElementById(id);
+    el.textContent = id === 'step1Output'
+      ? '작업 계획을 입력하고 심사를 시작해 주세요.'
+      : '최고안전책임자(CSO) 최종 결재 대기 중...';
+    el.classList.add('text-slate-400');
+    delete el.dataset.raw;
+  });
+  setStatus('step1Status', '대기 중', 'wait');
+  setStatus('step2Status', '대기 중', 'wait');
+  document.getElementById('decisionBadge').classList.add('hidden');
+  document.getElementById('printBtn').disabled = true;
+  document.getElementById('runBtn').textContent = '⚡ AI 2단계 교차 심사 시작';
+  lastDecisionText = '';
+  hideError();
+}
+</script>
 </body>
 </html>
